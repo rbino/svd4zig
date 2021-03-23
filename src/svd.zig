@@ -62,6 +62,21 @@ pub const Device = struct {
         self.interrupts.deinit();
     }
 
+    fn interruptSortCompare(context: void, left: Interrupt, right: Interrupt) bool {
+        if (left.value != null and right.value != null) {
+            if (left.value.? < right.value.?) {
+                return true;
+            }
+            if (left.value.? > right.value.?) {
+                return false;
+            }
+        } else if (left.value == null) {
+            return true;
+        }
+
+        return false;
+    }
+
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
         const name = if (self.name.items.len == 0) "unknown" else self.name.items;
         const version = if (self.version.items.len == 0) "unknown" else self.version.items;
@@ -80,14 +95,25 @@ pub const Device = struct {
         for (self.peripherals.items) |peripheral| {
             try out_stream.print("{}\n", .{peripheral});
         }
+
+        // sort interrupt table by value so it's easier to remove duplicates
+        std.sort.sort(Interrupt, self.interrupts.items, {}, interruptSortCompare);
+
         // now print interrupt table
         try out_stream.writeAll("pub const interrupts = struct {\n");
+
+        // save last printed value to skip duplicates
+        var last_printed_value: u32 = undefined;
+
         for (self.interrupts.items) |interrupt| {
             if (interrupt.value) |int_value| {
-                try out_stream.print(
-                    "pub const {} = {};\n",
-                    .{ interrupt.name.items, int_value },
-                );
+                if (int_value != last_printed_value) {
+                    last_printed_value = int_value;
+                    try out_stream.print(
+                        "pub const {} = {};\n",
+                        .{ interrupt.name.items, int_value },
+                    );
+                }
             }
         }
         try out_stream.writeAll("};");
