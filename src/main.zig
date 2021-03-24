@@ -8,6 +8,70 @@ const svd = @import("svd.zig");
 
 var line_buffer: [1024 * 1024]u8 = undefined;
 
+const register_def =
+    \\pub fn Register(comptime R: type) type {
+    \\    return RegisterRW(R, R);
+    \\}
+    \\
+    \\pub fn RegisterRW(comptime Read: type, comptime Write: type) type {
+    \\    return struct {
+    \\        raw_ptr: *volatile u32,
+    \\
+    \\        const Self = @This();
+    \\
+    \\        pub fn init(address: usize) Self {
+    \\            return Self{ .raw_ptr = @intToPtr(*volatile u32, address) };
+    \\        }
+    \\
+    \\        pub fn initRange(address: usize, comptime dim_increment: usize, comptime num_registers: usize) [num_registers]Self {
+    \\            var registers: [num_registers]Self = undefined;
+    \\            var i: usize = 0;
+    \\            while (i < num_registers) : (i += 1) {
+    \\                registers[i] = Self.init(address + (i * dim_increment));
+    \\            }
+    \\            return registers;
+    \\        }
+    \\
+    \\        pub fn read(self: Self) Read {
+    \\            return @bitCast(Read, self.raw_ptr.*);
+    \\        }
+    \\
+    \\        pub fn write(self: Self, value: Write) void {
+    \\            self.raw_ptr.* = @bitCast(u32, value);
+    \\        }
+    \\
+    \\        pub fn modify(self: Self, new_value: anytype) void {
+    \\            if (Read != Write) {
+    \\                @compileError("Can't modify because read and write types for this register aren't the same.");
+    \\            }
+    \\            var old_value = self.read();
+    \\            const info = @typeInfo(@TypeOf(new_value));
+    \\            inline for (info.Struct.fields) |field| {
+    \\                @field(old_value, field.name) = @field(new_value, field.name);
+    \\            }
+    \\            self.write(old_value);
+    \\        }
+    \\
+    \\        pub fn read_raw(self: Self) u32 {
+    \\            return self.raw_ptr.*;
+    \\        }
+    \\
+    \\        pub fn write_raw(self: Self, value: u32) void {
+    \\            self.raw_ptr.* = value;
+    \\        }
+    \\
+    \\        pub fn default_read_value(self: Self) Read {
+    \\            return Read{};
+    \\        }
+    \\
+    \\        pub fn default_write_value(self: Self) Write {
+    \\            return Write{};
+    \\        }
+    \\    };
+    \\}
+    \\
+;
+
 pub fn main() anyerror!void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -305,6 +369,7 @@ pub fn main() anyerror!void {
         }
     }
     if (state == .Finished) {
+        try std.io.getStdOut().writer().print("{s}\n", .{register_def});
         try std.io.getStdOut().writer().print("{}\n", .{dev});
     } else {
         return error.InvalidXML;
