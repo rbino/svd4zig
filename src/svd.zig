@@ -447,9 +447,9 @@ pub const Register = struct {
             chunk_end = alignedEndOfUnusedChunk(chunk_start, last_unused);
         }) {
             try out_stream.writeAll("\n");
-            // TODO: init this from the register reset value
-            const unused_value = 0;
             const chunk_width = chunk_end - chunk_start;
+            const unused_value = Field.fieldResetValue(chunk_start, chunk_width, reg_reset_value);
+
             try out_stream.print("_unused{}: u{} = {},", .{ chunk_start, chunk_width, unused_value });
         }
     }
@@ -516,6 +516,7 @@ pub const Fields = ArrayList(Field);
 pub const Field = struct {
     periph: ArrayList(u8),
     register: ArrayList(u8),
+    register_reset_value: u32,
     name: ArrayList(u8),
     description: ArrayList(u8),
     bit_offset: ?u32,
@@ -525,7 +526,7 @@ pub const Field = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator, periph_containing: []const u8, register_containing: []const u8) !Self {
+    pub fn init(allocator: *Allocator, periph_containing: []const u8, register_containing: []const u8, register_reset_value: u32) !Self {
         var periph = ArrayList(u8).init(allocator);
         try periph.appendSlice(periph_containing);
         errdefer periph.deinit();
@@ -540,6 +541,7 @@ pub const Field = struct {
         return Self{
             .periph = periph,
             .register = register,
+            .register_reset_value = register_reset_value,
             .name = name,
             .description = description,
             .bit_offset = null,
@@ -548,7 +550,7 @@ pub const Field = struct {
     }
 
     pub fn copy(self: Self, allocator: *Allocator) !Self {
-        var the_copy = try Self.init(allocator, self.periph.items, self.register.items);
+        var the_copy = try Self.init(allocator, self.periph.items, self.register.items, self.register_reset_value);
 
         try the_copy.name.appendSlice(self.name.items);
         try the_copy.description.appendSlice(self.description.items);
@@ -566,6 +568,13 @@ pub const Field = struct {
         self.description.deinit();
     }
 
+    pub fn fieldResetValue(bit_start: u32, bit_width: u32, reg_reset_value: u32) u32 {
+        const shifted_reset_value = reg_reset_value >> @intCast(u5, bit_start);
+        const reset_value_mask = @intCast(u32, (@as(u33, 1) << @intCast(u6, bit_width)) - 1);
+
+        return shifted_reset_value & reset_value_mask;
+    }
+
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (self.name.items.len == 0) {
@@ -581,8 +590,8 @@ pub const Field = struct {
         const start_bit = self.bit_offset.?;
         const end_bit = (start_bit + self.bit_width.? - 1);
         const bit_width = self.bit_width.?;
-        // TODO: init this from the register reset value
-        const reset_value = 0;
+        const reg_reset_value = self.register_reset_value;
+        const reset_value = fieldResetValue(start_bit, bit_width, reg_reset_value);
         try out_stream.print(
             \\/// {s} [{}:{}]
             \\/// {s}
@@ -608,7 +617,7 @@ test "Field print" {
         \\
         \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\RNGEN: u1 = 0,
+        \\RNGEN: u1 = 1,
         \\
     ;
 
@@ -616,7 +625,7 @@ test "Field print" {
     defer output_buffer.deinit();
     var buf_stream = output_buffer.writer();
 
-    var field = try Field.init(allocator, "PERIPH", "RND");
+    var field = try Field.init(allocator, "PERIPH", "RND", 0b101);
     defer field.deinit();
 
     try field.name.appendSlice("RNGEN");
@@ -635,10 +644,10 @@ test "Register Print" {
         \\/// RND
         \\const RND_val = packed struct {
         \\/// unused [0:1]
-        \\_unused0: u2 = 0,
+        \\_unused0: u2 = 1,
         \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\RNGEN: u1 = 0,
+        \\RNGEN: u1 = 1,
         \\/// unused [3:9]
         \\_unused3: u5 = 0,
         \\_unused8: u2 = 0,
@@ -659,14 +668,14 @@ test "Register Print" {
     defer output_buffer.deinit();
     var buf_stream = output_buffer.writer();
 
-    var register = try Register.init(allocator, "PERIPH", 0, 0x20);
+    var register = try Register.init(allocator, "PERIPH", 0b101, 0x20);
     defer register.deinit();
     try register.name.appendSlice("RND");
     try register.description.appendSlice("RND comment");
     register.address_offset = 0x100;
     register.size = 0x20;
 
-    var field = try Field.init(allocator, "PERIPH", "RND");
+    var field = try Field.init(allocator, "PERIPH", "RND", 0b101);
     defer field.deinit();
 
     try field.name.appendSlice("RNGEN");
@@ -675,7 +684,7 @@ test "Register Print" {
     field.bit_width = 1;
     field.access = .ReadWrite; // write field will exist
 
-    var field2 = try Field.init(allocator, "PERIPH", "RND");
+    var field2 = try Field.init(allocator, "PERIPH", "RND", 0b101);
     defer field2.deinit();
 
     try field2.name.appendSlice("SEED");
@@ -702,10 +711,10 @@ test "Peripheral Print" {
         \\/// RND
         \\const RND_val = packed struct {
         \\/// unused [0:1]
-        \\_unused0: u2 = 0,
+        \\_unused0: u2 = 1,
         \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\RNGEN: u1 = 0,
+        \\RNGEN: u1 = 1,
         \\/// unused [3:9]
         \\_unused3: u5 = 0,
         \\_unused8: u2 = 0,
@@ -733,14 +742,14 @@ test "Peripheral Print" {
     try peripheral.description.appendSlice("PERIPH comment");
     peripheral.base_address = 0x24000;
 
-    var register = try Register.init(allocator, "PERIPH", 0, 0x20);
+    var register = try Register.init(allocator, "PERIPH", 0b101, 0x20);
     defer register.deinit();
     try register.name.appendSlice("RND");
     try register.description.appendSlice("RND comment");
     register.address_offset = 0x100;
     register.size = 0x20;
 
-    var field = try Field.init(allocator, "PERIPH", "RND");
+    var field = try Field.init(allocator, "PERIPH", "RND", 0b101);
     defer field.deinit();
 
     try field.name.appendSlice("RNGEN");
@@ -749,7 +758,7 @@ test "Peripheral Print" {
     field.bit_width = 1;
     field.access = .ReadOnly; // since only register, write field will not exist
 
-    var field2 = try Field.init(allocator, "PERIPH", "RND");
+    var field2 = try Field.init(allocator, "PERIPH", "RND", 0b101);
     defer field2.deinit();
 
     try field2.name.appendSlice("SEED");

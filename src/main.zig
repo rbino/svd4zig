@@ -344,7 +344,7 @@ pub fn main() anyerror!void {
                 if (ascii.eqlIgnoreCase(chunk.tag, "/fields")) {
                     state = .Register;
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "field")) {
-                    var field = try svd.Field.init(allocator, cur_periph.name.items, cur_reg.name.items);
+                    var field = try svd.Field.init(allocator, cur_periph.name.items, cur_reg.name.items, cur_reg.reset_value);
                     try cur_reg.fields.append(field);
                     state = .Field;
                 }
