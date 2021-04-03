@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
+const min = std.math.min;
 const warn = std.debug.warn;
 
 /// Top Level
@@ -231,20 +232,24 @@ pub const Peripheral = struct {
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
-            try out_stream.writeAll("// Not enough info to print register value\n");
+            try out_stream.writeAll("// Not enough info to print peripheral value\n");
             return;
         }
         const name = self.name.items;
         const description = if (self.description.items.len == 0) "No description" else self.description.items;
+        const base_address = self.base_address.?;
         try out_stream.print(
             \\/// {s}
-            \\pub const {s}_Base_Address = 0x{x};
+            \\pub const {s} = struct {{
             \\
-        , .{ description, name, self.base_address.? });
+            \\const base_address = 0x{x};
+        , .{ description, name, base_address });
         // now print registers
         for (self.registers.items) |register| {
             try out_stream.print("{}\n", .{register});
         }
+        // and close the peripheral
+        try out_stream.print("}};", .{});
 
         return;
     }
@@ -409,6 +414,46 @@ pub const Register = struct {
         return true;
     }
 
+    fn fieldsSortCompare(context: void, left: Field, right: Field) bool {
+        if (left.bit_offset != null and right.bit_offset != null) {
+            if (left.bit_offset.? < right.bit_offset.?) {
+                return true;
+            }
+            if (left.bit_offset.? > right.bit_offset.?) {
+                return false;
+            }
+        } else if (left.bit_offset == null) {
+            return true;
+        }
+
+        return false;
+    }
+
+    fn alignedEndOfUnusedChunk(chunk_start: u32, last_unused: u32) u32 {
+        // Next multiple of 8 from chunk_start + 1
+        const next_multiple = (chunk_start + 8) & ~@as(u32, 7);
+        return min(next_multiple, last_unused);
+    }
+
+    fn writeUnusedField(first_unused: u32, last_unused: u32, reg_reset_value: u32, out_stream: anytype) !void {
+        // Fill unused bits between two fields
+        // TODO: right now we have to manually chunk unused bits to 8-bit boundaries as a workaround
+        // to this bug https://github.com/ziglang/zig/issues/2627
+        var chunk_start = first_unused;
+        var chunk_end = alignedEndOfUnusedChunk(chunk_start, last_unused);
+        try out_stream.print("\n/// unused [{}:{}]", .{ first_unused, last_unused - 1 });
+        while (chunk_start < last_unused) : ({
+            chunk_start = chunk_end;
+            chunk_end = alignedEndOfUnusedChunk(chunk_start, last_unused);
+        }) {
+            try out_stream.writeAll("\n");
+            // TODO: init this from the register reset value
+            const unused_value = 0;
+            const chunk_width = chunk_end - chunk_start;
+            try out_stream.print("_unused{}: u{} = {},", .{ chunk_start, chunk_width, unused_value });
+        }
+    }
+
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
@@ -418,55 +463,43 @@ pub const Register = struct {
         const name = self.name.items;
         const periph = self.periph_containing.items;
         const description = if (self.description.items.len == 0) "No description" else self.description.items;
+        // print packed struct containing fields
         try out_stream.print(
             \\/// {s}
-            \\
-        , .{description});
-        try out_stream.print(
-            \\pub const {s}_{s}_Address = {s}_Base_Address + 0x{x};
-            \\pub const {s}_{s}_Reset_Value = 0x{x};
-            \\
-        , .{
-            // address
-            periph,
-            name,
-            periph,
-            self.address_offset.?,
-            // reset value
-            periph,
-            name,
-            self.reset_value,
-        });
-        var write_mask: u32 = 0;
-        for (self.fields.items) |field| {
-            if (field.bit_offset) |def_offset| {
-                if (field.bit_width) |def_width| {
-                    if (field.access != .ReadOnly) {
-                        write_mask |= bitWidthToMask(def_width) << @truncate(u5, def_offset);
-                    }
-                }
-            }
-        }
-        const ptr_str =
-            \\pub const {s}_{s}_Write_Mask = 0x{x};
-            \\pub const {s}_{s}_Ptr = @intToPtr(*volatile u{}, {s}_{s}_Address);
-            \\
-        ;
+            \\const {s}_val = packed struct {{
+        , .{ name, name });
 
-        try out_stream.print(ptr_str, .{
-            periph,
-            name,
-            write_mask,
-            periph,
-            name,
-            self.size,
-            periph,
-            name,
-        });
-        // now print fields
+        // Sort fields from LSB to MSB for next step
+        std.sort.sort(Field, self.fields.items, {}, fieldsSortCompare);
+
+        var last_uncovered_bit: u32 = 0;
         for (self.fields.items) |field| {
-            try out_stream.print("{}\n", .{field});
+            if ((field.bit_offset == null) or (field.bit_width == null)) {
+                try out_stream.writeAll("// Not enough info to print register\n");
+                return;
+            }
+
+            const bit_offset = field.bit_offset.?;
+            const bit_width = field.bit_width.?;
+            if (last_uncovered_bit != bit_offset) {
+                try writeUnusedField(last_uncovered_bit, bit_offset, self.reset_value, out_stream);
+            }
+            try out_stream.print("{}", .{field});
+            last_uncovered_bit = bit_offset + bit_width;
         }
+
+        // Check if we need padding at the end
+        if (last_uncovered_bit != 32) {
+            try writeUnusedField(last_uncovered_bit, 32, self.reset_value, out_stream);
+        }
+
+        // close the struct and init the register
+        try out_stream.print(
+            \\
+            \\}};
+            \\/// {s}
+            \\pub const {s} = Register({s}_val).init(base_address + 0x{x});
+        , .{ description, name, name, self.address_offset.? });
 
         return;
     }
@@ -544,43 +577,26 @@ pub const Field = struct {
             return;
         }
         const name = self.name.items;
-        const periph = self.periph.items;
-        const register = self.register.items;
         const description = if (self.description.items.len == 0) "No description" else self.description.items;
-        const offset = self.bit_offset.?;
-        const base_mask = bitWidthToMask(self.bit_width.?);
+        const start_bit = self.bit_offset.?;
+        const end_bit = (start_bit + self.bit_width.? - 1);
+        const bit_width = self.bit_width.?;
+        // TODO: init this from the register reset value
+        const reset_value = 0;
         try out_stream.print(
+            \\/// {s} [{}:{}]
             \\/// {s}
-            \\pub const {s}_{s}_{s}_Offset = {};
-            \\pub const {s}_{s}_{s}_Mask = 0x{x} << {s}_{s}_{s}_Offset;
-            \\pub inline fn {s}_{s}_{s}(setting: u32) u32 {{
-            \\    return (setting & 0x{x}) << {s}_{s}_{s}_Offset;
-            \\}}
-            \\
+            \\{s}: u{} = {},
         , .{
+            name,
+            start_bit,
+            end_bit,
+            // description
             description,
-            // offset
-            periph,
-            register,
-            name,
-            offset,
-            // mask
-            periph,
-            register,
-            name,
-            base_mask,
-            periph,
-            register,
-            name,
             // val
-            periph,
-            register,
             name,
-            // setting
-            base_mask,
-            periph,
-            register,
-            name,
+            bit_width,
+            reset_value,
         });
         return;
     }
@@ -590,13 +606,9 @@ test "Field print" {
     var allocator = std.testing.allocator;
     const fieldDesiredPrint =
         \\
+        \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\pub const PERIPH_RND_RNGEN_Offset = 2;
-        \\pub const PERIPH_RND_RNGEN_Mask = 0x1 << PERIPH_RND_RNGEN_Offset;
-        \\pub inline fn PERIPH_RND_RNGEN(setting: u32) u32 {
-        \\    return (setting & 0x1) << PERIPH_RND_RNGEN_Offset;
-        \\}
-        \\
+        \\RNGEN: u1 = 0,
         \\
     ;
 
@@ -620,20 +632,26 @@ test "Register Print" {
     var allocator = std.testing.allocator;
     const registerDesiredPrint =
         \\
-        \\/// RND comment
-        \\pub const PERIPH_RND_Address = PERIPH_Base_Address + 0x100;
-        \\pub const PERIPH_RND_Reset_Value = 0x0;
-        \\pub const PERIPH_RND_Write_Mask = 0x4;
-        \\pub const PERIPH_RND_Ptr = @intToPtr(*volatile u32, PERIPH_RND_Address);
-        \\
+        \\/// RND
+        \\const RND_val = packed struct {
+        \\/// unused [0:1]
+        \\_unused0: u2 = 0,
+        \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\pub const PERIPH_RND_RNGEN_Offset = 2;
-        \\pub const PERIPH_RND_RNGEN_Mask = 0x1 << PERIPH_RND_RNGEN_Offset;
-        \\pub inline fn PERIPH_RND_RNGEN(setting: u32) u32 {
-        \\    return (setting & 0x1) << PERIPH_RND_RNGEN_Offset;
-        \\}
-        \\
-        \\
+        \\RNGEN: u1 = 0,
+        \\/// unused [3:9]
+        \\_unused3: u5 = 0,
+        \\_unused8: u2 = 0,
+        \\/// SEED [10:12]
+        \\/// SEED comment
+        \\SEED: u3 = 0,
+        \\/// unused [13:31]
+        \\_unused13: u3 = 0,
+        \\_unused16: u8 = 0,
+        \\_unused24: u8 = 0,
+        \\};
+        \\/// RND comment
+        \\pub const RND = Register(RND_val).init(base_address + 0x100);
         \\
     ;
 
@@ -657,7 +675,17 @@ test "Register Print" {
     field.bit_width = 1;
     field.access = .ReadWrite; // write field will exist
 
+    var field2 = try Field.init(allocator, "PERIPH", "RND");
+    defer field2.deinit();
+
+    try field2.name.appendSlice("SEED");
+    try field2.description.appendSlice("SEED comment");
+    field2.bit_offset = 10;
+    field2.bit_width = 3;
+    field2.access = .ReadWrite;
+
     try register.fields.append(field);
+    try register.fields.append(field2);
 
     try buf_stream.print("{}\n", .{register});
     std.testing.expectEqualSlices(u8, output_buffer.items, registerDesiredPrint);
@@ -668,23 +696,30 @@ test "Peripheral Print" {
     const peripheralDesiredPrint =
         \\
         \\/// PERIPH comment
-        \\pub const PERIPH_Base_Address = 0x24000;
+        \\pub const PERIPH = struct {
         \\
-        \\/// RND comment
-        \\pub const PERIPH_RND_Address = PERIPH_Base_Address + 0x100;
-        \\pub const PERIPH_RND_Reset_Value = 0x0;
-        \\pub const PERIPH_RND_Write_Mask = 0x0;
-        \\pub const PERIPH_RND_Ptr = @intToPtr(*volatile u32, PERIPH_RND_Address);
-        \\
+        \\const base_address = 0x24000;
+        \\/// RND
+        \\const RND_val = packed struct {
+        \\/// unused [0:1]
+        \\_unused0: u2 = 0,
+        \\/// RNGEN [2:2]
         \\/// RNGEN comment
-        \\pub const PERIPH_RND_RNGEN_Offset = 2;
-        \\pub const PERIPH_RND_RNGEN_Mask = 0x1 << PERIPH_RND_RNGEN_Offset;
-        \\pub inline fn PERIPH_RND_RNGEN(setting: u32) u32 {
-        \\    return (setting & 0x1) << PERIPH_RND_RNGEN_Offset;
-        \\}
-        \\
-        \\
-        \\
+        \\RNGEN: u1 = 0,
+        \\/// unused [3:9]
+        \\_unused3: u5 = 0,
+        \\_unused8: u2 = 0,
+        \\/// SEED [10:12]
+        \\/// SEED comment
+        \\SEED: u3 = 0,
+        \\/// unused [13:31]
+        \\_unused13: u3 = 0,
+        \\_unused16: u8 = 0,
+        \\_unused24: u8 = 0,
+        \\};
+        \\/// RND comment
+        \\pub const RND = Register(RND_val).init(base_address + 0x100);
+        \\};
         \\
     ;
 
@@ -714,7 +749,17 @@ test "Peripheral Print" {
     field.bit_width = 1;
     field.access = .ReadOnly; // since only register, write field will not exist
 
+    var field2 = try Field.init(allocator, "PERIPH", "RND");
+    defer field2.deinit();
+
+    try field2.name.appendSlice("SEED");
+    try field2.description.appendSlice("SEED comment");
+    field2.bit_offset = 10;
+    field2.bit_width = 3;
+    field2.access = .ReadWrite;
+
     try register.fields.append(field);
+    try register.fields.append(field2);
 
     try peripheral.registers.append(register);
 
