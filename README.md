@@ -25,10 +25,8 @@ Features taken from lynaghk's `svd2zig`:
   post](https://scattered-thoughts.net/writing/mmio-in-zig) from the original authors)
 
 New features:
-- Compatible with zig 0.8
 - Unused bits are manually aligned to 8 bit boundaries to avoid incurring in [this
   bug](https://github.com/ziglang/zig/issues/2627)
-- Assorted bugfixes
 
 The entire specification is not completely supported yet, feel free to send pull requests to flesh
 out the parts of the specification that are missing for your project.
