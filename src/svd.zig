@@ -86,7 +86,7 @@ pub const Device = struct {
         try out_stream.writeAll("pub const interrupts = struct {\n");
         var iter = self.interrupts.iterator();
         while (iter.next()) |entry| {
-            var interrupt = entry.value;
+            var interrupt = entry.value_ptr.*;
             if (interrupt.value) |int_value| {
                 try out_stream.print(
                     "pub const {s} = {};\n",
