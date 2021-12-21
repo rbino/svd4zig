@@ -29,7 +29,7 @@ pub const Device = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var version = ArrayList(u8).init(allocator);
@@ -110,7 +110,7 @@ pub const Cpu = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var revision = ArrayList(u8).init(allocator);
@@ -177,7 +177,7 @@ pub const Peripheral = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var group_name = ArrayList(u8).init(allocator);
@@ -197,7 +197,7 @@ pub const Peripheral = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator);
         errdefer the_copy.deinit();
 
@@ -262,7 +262,7 @@ pub const AddressBlock = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var usage = ArrayList(u8).init(allocator);
         errdefer usage.deinit();
 
@@ -287,7 +287,7 @@ pub const Interrupt = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var description = ArrayList(u8).init(allocator);
@@ -300,7 +300,7 @@ pub const Interrupt = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator);
 
         try the_copy.name.append(self.name.items);
@@ -356,7 +356,7 @@ pub const Register = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator, periph: []const u8, reset_value: u32, size: u32) !Self {
+    pub fn init(allocator: Allocator, periph: []const u8, reset_value: u32, size: u32) !Self {
         var prefix = ArrayList(u8).init(allocator);
         errdefer prefix.deinit();
         try prefix.appendSlice(periph);
@@ -381,7 +381,7 @@ pub const Register = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator, self.periph_containing.items, self.reset_value, self.size);
 
         try the_copy.name.appendSlice(self.name.items);
@@ -526,7 +526,7 @@ pub const Field = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator, periph_containing: []const u8, register_containing: []const u8, register_reset_value: u32) !Self {
+    pub fn init(allocator: Allocator, periph_containing: []const u8, register_containing: []const u8, register_reset_value: u32) !Self {
         var periph = ArrayList(u8).init(allocator);
         try periph.appendSlice(periph_containing);
         errdefer periph.deinit();
@@ -549,7 +549,7 @@ pub const Field = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator, self.periph.items, self.register.items, self.register_reset_value);
 
         try the_copy.name.appendSlice(self.name.items);
