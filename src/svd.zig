@@ -327,7 +327,7 @@ pub const Interrupt = struct {
     pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
-            try output(context, "// Not enough info to print interrupt value\n");
+            try out_stream.writeAll("// Not enough info to print interrupt value\n");
             return;
         }
         const name = self.name.items;
@@ -336,7 +336,7 @@ pub const Interrupt = struct {
             \\/// {s}
             \\pub const {s} = {s};
             \\
-        , .{ description, name, value.? });
+        , .{ description, name, self.value.? });
     }
 };
 
