@@ -64,7 +64,7 @@ pub const Device = struct {
         self.interrupts.deinit();
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         const name = if (self.name.items.len == 0) "unknown" else self.name.items;
         const version = if (self.version.items.len == 0) "unknown" else self.version.items;
         const description = if (self.description.items.len == 0) "unknown" else self.description.items;
@@ -135,7 +135,7 @@ pub const Cpu = struct {
         self.endian.deinit();
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
 
         const name = if (self.name.items.len == 0) "unknown" else self.name.items;
@@ -229,7 +229,7 @@ pub const Peripheral = struct {
         return true;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
             try out_stream.writeAll("// Not enough info to print peripheral value\n");
@@ -324,7 +324,7 @@ pub const Interrupt = struct {
         return true;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
             try output(context, "// Not enough info to print interrupt value\n");
@@ -414,7 +414,7 @@ pub const Register = struct {
         return true;
     }
 
-    fn fieldsSortCompare(context: void, left: Field, right: Field) bool {
+    fn fieldsSortCompare(_: void, left: Field, right: Field) bool {
         if (left.bit_offset != null and right.bit_offset != null) {
             if (left.bit_offset.? < right.bit_offset.?) {
                 return true;
@@ -454,14 +454,14 @@ pub const Register = struct {
         }
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
             try out_stream.writeAll("// Not enough info to print register value\n");
             return;
         }
         const name = self.name.items;
-        const periph = self.periph_containing.items;
+        // const periph = self.periph_containing.items;
         const description = if (self.description.items.len == 0) "No description" else self.description.items;
         // print packed struct containing fields
         try out_stream.print(
@@ -575,7 +575,7 @@ pub const Field = struct {
         return shifted_reset_value & reset_value_mask;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (self.name.items.len == 0) {
             try out_stream.writeAll("// No name to print field value\n");

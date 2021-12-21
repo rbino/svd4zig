@@ -220,7 +220,7 @@ pub fn main() anyerror!void {
                         cur_periph.base_address = parseHexLiteral(data);
                     }
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "addressBlock")) {
-                    if (cur_periph.address_block) |x| {
+                    if (cur_periph.address_block) |_| {
                         // do nothing
                     } else {
                         var block = try svd.AddressBlock.init(allocator);
