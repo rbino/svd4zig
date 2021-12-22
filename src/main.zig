@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const ascii = std.ascii;
 const fmt = std.fmt;
-const warn = std.debug.warn;
+const warn = std.log.warn;
 
 const svd = @import("svd.zig");
 
@@ -60,11 +60,11 @@ const register_def =
     \\            self.raw_ptr.* = value;
     \\        }
     \\
-    \\        pub fn default_read_value(self: Self) Read {
+    \\        pub fn default_read_value(_: Self) Read {
     \\            return Read{};
     \\        }
     \\
-    \\        pub fn default_write_value(self: Self) Write {
+    \\        pub fn default_write_value(_: Self) Write {
     \\            return Write{};
     \\        }
     \\    };
@@ -76,7 +76,7 @@ pub fn main() anyerror!void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    const allocator = &arena.allocator;
+    const allocator = arena.allocator();
 
     var args = std.process.args();
 
@@ -220,7 +220,7 @@ pub fn main() anyerror!void {
                         cur_periph.base_address = parseHexLiteral(data);
                     }
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "addressBlock")) {
-                    if (cur_periph.address_block) |x| {
+                    if (cur_periph.address_block) |_| {
                         // do nothing
                     } else {
                         var block = try svd.AddressBlock.init(allocator);
@@ -418,10 +418,10 @@ fn getChunk(line: []const u8) ?XmlChunk {
     };
 
     var trimmed = mem.trim(u8, line, " \n");
-    var toker = mem.tokenize(trimmed, "<>"); //" =\n<>\"");
+    var toker = mem.tokenize(u8, trimmed, "<>"); //" =\n<>\"");
 
     if (toker.next()) |maybe_tag| {
-        var tag_toker = mem.tokenize(maybe_tag, " =\"");
+        var tag_toker = mem.tokenize(u8, maybe_tag, " =\"");
         chunk.tag = tag_toker.next() orelse return null;
         if (tag_toker.next()) |maybe_tag_property| {
             if (ascii.eqlIgnoreCase(maybe_tag_property, "derivedFrom")) {

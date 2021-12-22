@@ -29,7 +29,7 @@ pub const Device = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var version = ArrayList(u8).init(allocator);
@@ -64,7 +64,7 @@ pub const Device = struct {
         self.interrupts.deinit();
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         const name = if (self.name.items.len == 0) "unknown" else self.name.items;
         const version = if (self.version.items.len == 0) "unknown" else self.version.items;
         const description = if (self.description.items.len == 0) "unknown" else self.description.items;
@@ -110,7 +110,7 @@ pub const Cpu = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var revision = ArrayList(u8).init(allocator);
@@ -135,7 +135,7 @@ pub const Cpu = struct {
         self.endian.deinit();
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
 
         const name = if (self.name.items.len == 0) "unknown" else self.name.items;
@@ -177,7 +177,7 @@ pub const Peripheral = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var group_name = ArrayList(u8).init(allocator);
@@ -197,7 +197,7 @@ pub const Peripheral = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator);
         errdefer the_copy.deinit();
 
@@ -229,7 +229,7 @@ pub const Peripheral = struct {
         return true;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
             try out_stream.writeAll("// Not enough info to print peripheral value\n");
@@ -262,7 +262,7 @@ pub const AddressBlock = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var usage = ArrayList(u8).init(allocator);
         errdefer usage.deinit();
 
@@ -287,7 +287,7 @@ pub const Interrupt = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator) !Self {
+    pub fn init(allocator: Allocator) !Self {
         var name = ArrayList(u8).init(allocator);
         errdefer name.deinit();
         var description = ArrayList(u8).init(allocator);
@@ -300,7 +300,7 @@ pub const Interrupt = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator);
 
         try the_copy.name.append(self.name.items);
@@ -324,10 +324,10 @@ pub const Interrupt = struct {
         return true;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
-            try output(context, "// Not enough info to print interrupt value\n");
+            try out_stream.writeAll("// Not enough info to print interrupt value\n");
             return;
         }
         const name = self.name.items;
@@ -336,7 +336,7 @@ pub const Interrupt = struct {
             \\/// {s}
             \\pub const {s} = {s};
             \\
-        , .{ description, name, value.? });
+        , .{ description, name, self.value.? });
     }
 };
 
@@ -356,7 +356,7 @@ pub const Register = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator, periph: []const u8, reset_value: u32, size: u32) !Self {
+    pub fn init(allocator: Allocator, periph: []const u8, reset_value: u32, size: u32) !Self {
         var prefix = ArrayList(u8).init(allocator);
         errdefer prefix.deinit();
         try prefix.appendSlice(periph);
@@ -381,7 +381,7 @@ pub const Register = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator, self.periph_containing.items, self.reset_value, self.size);
 
         try the_copy.name.appendSlice(self.name.items);
@@ -414,7 +414,7 @@ pub const Register = struct {
         return true;
     }
 
-    fn fieldsSortCompare(context: void, left: Field, right: Field) bool {
+    fn fieldsSortCompare(_: void, left: Field, right: Field) bool {
         if (left.bit_offset != null and right.bit_offset != null) {
             if (left.bit_offset.? < right.bit_offset.?) {
                 return true;
@@ -454,14 +454,14 @@ pub const Register = struct {
         }
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (!self.isValid()) {
             try out_stream.writeAll("// Not enough info to print register value\n");
             return;
         }
         const name = self.name.items;
-        const periph = self.periph_containing.items;
+        // const periph = self.periph_containing.items;
         const description = if (self.description.items.len == 0) "No description" else self.description.items;
         // print packed struct containing fields
         try out_stream.print(
@@ -526,7 +526,7 @@ pub const Field = struct {
 
     const Self = @This();
 
-    pub fn init(allocator: *Allocator, periph_containing: []const u8, register_containing: []const u8, register_reset_value: u32) !Self {
+    pub fn init(allocator: Allocator, periph_containing: []const u8, register_containing: []const u8, register_reset_value: u32) !Self {
         var periph = ArrayList(u8).init(allocator);
         try periph.appendSlice(periph_containing);
         errdefer periph.deinit();
@@ -549,7 +549,7 @@ pub const Field = struct {
         };
     }
 
-    pub fn copy(self: Self, allocator: *Allocator) !Self {
+    pub fn copy(self: Self, allocator: Allocator) !Self {
         var the_copy = try Self.init(allocator, self.periph.items, self.register.items, self.register_reset_value);
 
         try the_copy.name.appendSlice(self.name.items);
@@ -575,7 +575,7 @@ pub const Field = struct {
         return shifted_reset_value & reset_value_mask;
     }
 
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+    pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.writeAll("\n");
         if (self.name.items.len == 0) {
             try out_stream.writeAll("// No name to print field value\n");
