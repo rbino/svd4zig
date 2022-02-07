@@ -37,7 +37,13 @@ const register_def =
     \\        }
     \\
     \\        pub fn write(self: Self, value: Write) void {
-    \\            self.raw_ptr.* = @bitCast(u32, value);
+    \\            // Forcing the alignment is a workaround for stores through
+    \\            // volatile pointers generating multiple loads and stores.
+    \\            // This is necessary for LLVM to generate code that can successfully
+    \\            // modify MMIO registers that only allow word-sized stores.
+    \\            // https://github.com/ziglang/zig/issues/8981#issuecomment-854911077
+    \\            const aligned: Write align(4) = value;
+    \\            self.raw_ptr.* = @ptrCast(*const u32, &aligned).*;
     \\        }
     \\
     \\        pub fn modify(self: Self, new_value: anytype) void {
