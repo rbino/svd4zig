@@ -142,7 +142,7 @@ pub const Cpu = struct {
         const revision = if (self.revision.items.len == 0) "unknown" else self.revision.items;
         const endian = if (self.endian.items.len == 0) "unknown" else self.endian.items;
         const mpu_present = self.mpu_present orelse false;
-        const fpu_present = self.mpu_present orelse false;
+        const fpu_present = self.fpu_present orelse false;
         const vendor_systick_config = self.vendor_systick_config orelse false;
         try out_stream.print(
             \\pub const cpu = struct {{
