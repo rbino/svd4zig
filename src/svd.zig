@@ -634,7 +634,7 @@ test "Field print" {
     field.bit_width = 1;
 
     try buf_stream.print("{}\n", .{field});
-    std.testing.expect(std.mem.eql(u8, output_buffer.items, fieldDesiredPrint));
+    try std.testing.expect(std.mem.eql(u8, output_buffer.items, fieldDesiredPrint));
 }
 
 test "Register Print" {
@@ -697,7 +697,7 @@ test "Register Print" {
     try register.fields.append(field2);
 
     try buf_stream.print("{}\n", .{register});
-    std.testing.expectEqualSlices(u8, output_buffer.items, registerDesiredPrint);
+    try std.testing.expectEqualSlices(u8, output_buffer.items, registerDesiredPrint);
 }
 
 test "Peripheral Print" {
@@ -773,7 +773,7 @@ test "Peripheral Print" {
     try peripheral.registers.append(register);
 
     try buf_stream.print("{}\n", .{peripheral});
-    std.testing.expectEqualSlices(u8, peripheralDesiredPrint, output_buffer.items);
+    try std.testing.expectEqualSlices(u8, peripheralDesiredPrint, output_buffer.items);
 }
 fn bitWidthToMask(width: u32) u32 {
     const max_supported_bits = 32;
