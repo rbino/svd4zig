@@ -10,4 +10,5 @@ pub fn build(b: *Builder) void {
         .optimize = mode,
     });
     b.default_step.dependOn(&exe.step);
+    b.installArtifact(exe);
 }
