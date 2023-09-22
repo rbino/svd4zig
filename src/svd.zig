@@ -432,7 +432,7 @@ pub const Register = struct {
     fn alignedEndOfUnusedChunk(chunk_start: u32, last_unused: u32) u32 {
         // Next multiple of 8 from chunk_start + 1
         const next_multiple = (chunk_start + 8) & ~@as(u32, 7);
-        return min(next_multiple, last_unused);
+        return @min(next_multiple, last_unused);
     }
 
     fn writeUnusedField(first_unused: u32, last_unused: u32, reg_reset_value: u32, out_stream: anytype) !void {
@@ -470,7 +470,7 @@ pub const Register = struct {
         , .{ name, name });
 
         // Sort fields from LSB to MSB for next step
-        std.sort.sort(Field, self.fields.items, {}, fieldsSortCompare);
+        std.sort.block(Field, self.fields.items, {}, fieldsSortCompare);
 
         var last_uncovered_bit: u32 = 0;
         for (self.fields.items) |field| {
@@ -569,8 +569,8 @@ pub const Field = struct {
     }
 
     pub fn fieldResetValue(bit_start: u32, bit_width: u32, reg_reset_value: u32) u32 {
-        const shifted_reset_value = reg_reset_value >> @intCast(u5, bit_start);
-        const reset_value_mask = @intCast(u32, (@as(u33, 1) << @intCast(u6, bit_width)) - 1);
+        const shifted_reset_value = reg_reset_value >> @as(u5, @intCast(bit_start));
+        const reset_value_mask = @as(u32, @intCast((@as(u33, 1) << @as(u6, @intCast(bit_width))) - 1));
 
         return shifted_reset_value & reset_value_mask;
     }
@@ -779,12 +779,14 @@ fn bitWidthToMask(width: u32) u32 {
     const max_supported_bits = 32;
     const width_to_mask = blk: {
         comptime var mask_array: [max_supported_bits + 1]u32 = undefined;
-        inline for (mask_array) |*item, i| {
+        inline for (mask_array, 0..) |*item, i| {
             const i_use = if (i == 0) max_supported_bits else i;
             // This is needed to support both Zig 0.7 and 0.8
             const int_type_info =
                 if (@hasField(builtin.TypeInfo.Int, "signedness"))
-            .{ .signedness = .unsigned, .bits = i_use } else .{ .is_signed = false, .bits = i_use };
+                .{ .signedness = .unsigned, .bits = i_use }
+            else
+                .{ .is_signed = false, .bits = i_use };
 
             item.* = std.math.maxInt(@Type(builtin.TypeInfo{ .Int = int_type_info }));
         }
