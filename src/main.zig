@@ -20,7 +20,7 @@ const register_def =
     \\        const Self = @This();
     \\
     \\        pub fn init(address: usize) Self {
-    \\            return Self{ .raw_ptr = @intToPtr(*volatile u32, address) };
+    \\            return Self{ .raw_ptr = @as(*volatile u32, @ptrFromInt(address)) };
     \\        }
     \\
     \\        pub fn initRange(address: usize, comptime dim_increment: usize, comptime num_registers: usize) [num_registers]Self {
@@ -33,7 +33,7 @@ const register_def =
     \\        }
     \\
     \\        pub fn read(self: Self) Read {
-    \\            return @bitCast(Read, self.raw_ptr.*);
+    \\            return @as(Read, @bitCast(self.raw_ptr.*));
     \\        }
     \\
     \\        pub fn write(self: Self, value: Write) void {
@@ -43,7 +43,7 @@ const register_def =
     \\            // modify MMIO registers that only allow word-sized stores.
     \\            // https://github.com/ziglang/zig/issues/8981#issuecomment-854911077
     \\            const aligned: Write align(4) = value;
-    \\            self.raw_ptr.* = @ptrCast(*const u32, &aligned).*;
+    \\            self.raw_ptr.* = @as(*const u32, @ptrCast(&aligned)).*;
     \\        }
     \\
     \\        pub fn modify(self: Self, new_value: anytype) void {
