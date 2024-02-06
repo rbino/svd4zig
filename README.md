@@ -34,19 +34,19 @@ out the parts of the specification that are missing for your project.
 ## Build:
 
 ```
-zig build -Drelease-safe
+zig build -Doptimize=ReleaseSafe
 ```
 
 ## Usage:
 
 ```
-./zig-cache/bin/svd4zig path/to/svd/file > path/to/output.zig
+./zig-out/bin/svd4zig path/to/svd/file > path/to/output.zig
 zig fmt path/to/output.zig
 ```
 
 ## Suggested location to find SVD file:
 
-https://github.com/posborne/cmsis-svd
+https://github.com/cmsis-svd/cmsis-svd-data
 
 ## How to use the generated code:
 
