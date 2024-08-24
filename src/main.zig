@@ -84,13 +84,13 @@ pub fn main() anyerror!void {
 
     const allocator = arena.allocator();
 
-    var args = std.process.args();
+    var args = try std.process.argsWithAllocator(allocator);
 
-    _ = args.next(allocator); // skip application name
+    _ = args.next(); // skip application name
     // Note memory will be freed on exit since using arena
 
-    const file_name = try args.next(allocator) orelse return error.MandatoryFilenameArgumentNotGiven;
-    const file = try std.fs.cwd().openFile(file_name, .{ .read = true, .write = false });
+    const file_name = args.next() orelse return error.MandatoryFilenameArgumentNotGiven;
+    const file = try std.fs.cwd().openFile(file_name, .{});
 
     const stream = &file.reader();
 
@@ -101,7 +101,7 @@ pub fn main() anyerror!void {
         if (line.len == 0) {
             break;
         }
-        var chunk = getChunk(line) orelse continue;
+        const chunk = getChunk(line) orelse continue;
         switch (state) {
             .Device => {
                 if (ascii.eqlIgnoreCase(chunk.tag, "/device")) {
@@ -119,7 +119,7 @@ pub fn main() anyerror!void {
                         try dev.description.insertSlice(0, data);
                     }
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "cpu")) {
-                    var cpu = try svd.Cpu.init(allocator);
+                    const cpu = try svd.Cpu.init(allocator);
                     dev.cpu = cpu;
                     state = .Cpu;
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "addressUnitBits")) {
@@ -192,7 +192,7 @@ pub fn main() anyerror!void {
                             }
                         }
                     } else {
-                        var periph = try svd.Peripheral.init(allocator);
+                        const periph = try svd.Peripheral.init(allocator);
                         try dev.peripherals.append(periph);
                         state = .Peripheral;
                     }
@@ -229,7 +229,7 @@ pub fn main() anyerror!void {
                     if (cur_periph.address_block) |_| {
                         // do nothing
                     } else {
-                        var block = try svd.AddressBlock.init(allocator);
+                        const block = try svd.AddressBlock.init(allocator);
                         cur_periph.address_block = block;
                     }
                     state = .AddressBlock;
@@ -265,8 +265,8 @@ pub fn main() anyerror!void {
                         // If we find a duplicate interrupt, deinit the old one
                         if (try dev.interrupts.fetchPut(value, cur_interrupt)) |old_entry| {
                             var old_interrupt = old_entry.value;
-                            var old_name = old_interrupt.name.items;
-                            var cur_name = cur_interrupt.name.items;
+                            const old_name = old_interrupt.name.items;
+                            const cur_name = cur_interrupt.name.items;
                             if (!mem.eql(u8, old_name, cur_name)) {
                                 warn(
                                     \\ Found duplicate interrupt values with different names: {s} and {s}
@@ -302,7 +302,7 @@ pub fn main() anyerror!void {
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "register")) {
                     const reset_value = dev.reg_default_reset_value orelse 0;
                     const size = dev.reg_default_size orelse 32;
-                    var register = try svd.Register.init(allocator, cur_periph.name.items, reset_value, size);
+                    const register = try svd.Register.init(allocator, cur_periph.name.items, reset_value, size);
                     try cur_periph.registers.append(register);
                     state = .Register;
                 }
@@ -350,7 +350,7 @@ pub fn main() anyerror!void {
                 if (ascii.eqlIgnoreCase(chunk.tag, "/fields")) {
                     state = .Register;
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "field")) {
-                    var field = try svd.Field.init(allocator, cur_periph.name.items, cur_reg.name.items, cur_reg.reset_value);
+                    const field = try svd.Field.init(allocator, cur_periph.name.items, cur_reg.name.items, cur_reg.reset_value);
                     try cur_reg.fields.append(field);
                     state = .Field;
                 }
@@ -423,7 +423,7 @@ fn getChunk(line: []const u8) ?XmlChunk {
         .derivedFrom = null,
     };
 
-    var trimmed = mem.trim(u8, line, " \n");
+    const trimmed = mem.trim(u8, line, " \n");
     var toker = mem.tokenize(u8, trimmed, "<>"); //" =\n<>\"");
 
     if (toker.next()) |maybe_tag| {
