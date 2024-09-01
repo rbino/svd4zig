@@ -20,7 +20,8 @@ const register_def =
     \\        const Self = @This();
     \\
     \\        pub fn init(address: usize) Self {
-    \\            return Self{ .raw_ptr = @intToPtr(*volatile u32, address) };
+    \\            const ptr: *volatile u32 = @ptrFromInt(address);
+    \\            return Self{ .raw_ptr = ptr };
     \\        }
     \\
     \\        pub fn initRange(address: usize, comptime dim_increment: usize, comptime num_registers: usize) [num_registers]Self {
@@ -33,7 +34,7 @@ const register_def =
     \\        }
     \\
     \\        pub fn read(self: Self) Read {
-    \\            return @bitCast(Read, self.raw_ptr.*);
+    \\            return @bitCast(self.raw_ptr.*);
     \\        }
     \\
     \\        pub fn write(self: Self, value: Write) void {
@@ -43,7 +44,8 @@ const register_def =
     \\            // modify MMIO registers that only allow word-sized stores.
     \\            // https://github.com/ziglang/zig/issues/8981#issuecomment-854911077
     \\            const aligned: Write align(4) = value;
-    \\            self.raw_ptr.* = @ptrCast(*const u32, &aligned).*;
+    \\            const ptr: *const u32 = @ptrCast(&aligned);
+    \\            self.raw_ptr.* = ptr.*;
     \\        }
     \\
     \\        pub fn modify(self: Self, new_value: anytype) void {
@@ -98,10 +100,8 @@ pub fn main() anyerror!void {
     var dev = try svd.Device.init(allocator);
     var cur_interrupt: svd.Interrupt = undefined;
     while (try stream.readUntilDelimiterOrEof(&line_buffer, '\n')) |line| {
-        if (line.len == 0) {
-            break;
-        }
         const chunk = getChunk(line) orelse continue;
+
         switch (state) {
             .Device => {
                 if (ascii.eqlIgnoreCase(chunk.tag, "/device")) {
@@ -363,7 +363,9 @@ pub fn main() anyerror!void {
                     state = .Fields;
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "name")) {
                     if (chunk.data) |data| {
-                        try cur_field.name.insertSlice(0, data);
+                        if (cur_field.name.items.len == 0) {
+                            try cur_field.name.insertSlice(0, data);
+                        }
                     }
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "description")) {
                     if (chunk.data) |data| {
@@ -377,9 +379,48 @@ pub fn main() anyerror!void {
                     if (chunk.data) |data| {
                         cur_field.bit_width = fmt.parseInt(u32, data, 10) catch null;
                     }
+                } else if (ascii.eqlIgnoreCase(chunk.tag, "bitRange")) {
+                    if (chunk.data) |data| {
+                        const len = data.len;
+                        const s = data[1 .. len - 1];
+                        var it = std.mem.split(u8, s, ":");
+                        const msb = try fmt.parseInt(u32, it.next() orelse unreachable, 10);
+                        const lsb_str = it.next() orelse unreachable;
+                        var lsb: u32 = undefined;
+                        if (lsb_str.len == 0) {
+                            lsb = 0;
+                        } else {
+                            lsb = try fmt.parseInt(u32, lsb_str, 10);
+                        }
+                        cur_field.bit_width = (msb - lsb) + 1;
+                        cur_field.bit_offset = lsb;
+                    }
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "access")) {
                     if (chunk.data) |data| {
                         cur_field.access = parseAccessValue(data) orelse cur_field.access;
+                    }
+                } else if (ascii.eqlIgnoreCase(chunk.tag, "enumeratedValues")) {
+                    state = .FieldEnum;
+                }
+            },
+            .FieldEnum => {
+                var cur_periph = &dev.peripherals.items[dev.peripherals.items.len - 1];
+                var cur_reg = &cur_periph.registers.items[cur_periph.registers.items.len - 1];
+                var cur_field = &cur_reg.fields.items[cur_reg.fields.items.len - 1];
+                if (ascii.eqlIgnoreCase(chunk.tag, "/enumeratedValues")) {
+                    state = .Field;
+                } else if (ascii.eqlIgnoreCase(chunk.tag, "enumeratedValue")) {
+                    const enum_field = try svd.EnumField.init(allocator);
+                    try cur_field.enum_fields.append(enum_field);
+                } else if (ascii.eqlIgnoreCase(chunk.tag, "name")) {
+                    var cur_enum = &cur_field.enum_fields.items[cur_field.enum_fields.items.len - 1];
+                    if (chunk.data) |data| {
+                        try cur_enum.name.insertSlice(0, data);
+                    }
+                } else if (ascii.eqlIgnoreCase(chunk.tag, "value")) {
+                    var cur_enum = &cur_field.enum_fields.items[cur_field.enum_fields.items.len - 1];
+                    if (chunk.data) |data| {
+                        cur_enum.value = try fmt.parseInt(u32, data, 10);
                     }
                 }
             },
@@ -407,6 +448,7 @@ const SvdParseState = enum {
     Register,
     Fields,
     Field,
+    FieldEnum,
     Finished,
 };
 

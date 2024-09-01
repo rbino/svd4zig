@@ -444,6 +444,7 @@ pub const Register = struct {
         // to this bug https://github.com/ziglang/zig/issues/2627
         var chunk_start = first_unused;
         var chunk_end = alignedEndOfUnusedChunk(chunk_start, last_unused);
+
         try out_stream.print("\n/// unused [{}:{}]", .{ first_unused, last_unused - 1 });
         while (chunk_start < last_unused) : ({
             chunk_start = chunk_end;
@@ -477,6 +478,7 @@ pub const Register = struct {
 
         var last_uncovered_bit: u32 = 0;
         for (self.fields.items) |field| {
+            // Check if field is an enum field
             if ((field.bit_offset == null) or (field.bit_width == null)) {
                 try out_stream.writeAll("// Not enough info to print register\n");
                 return;
@@ -516,6 +518,27 @@ pub const Access = enum {
 
 pub const Fields = ArrayList(Field);
 
+pub const EnumField = struct {
+    name: ArrayList(u8),
+    value: ?u32,
+
+    const Self = @This();
+
+    pub fn init(allocator: Allocator) !Self {
+        var name = ArrayList(u8).init(allocator);
+        errdefer name.deinit();
+
+        return Self{
+            .name = name,
+            .value = null,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.name.deinit();
+    }
+};
+
 pub const Field = struct {
     periph: ArrayList(u8),
     register: ArrayList(u8),
@@ -524,6 +547,7 @@ pub const Field = struct {
     description: ArrayList(u8),
     bit_offset: ?u32,
     bit_width: ?u32,
+    enum_fields: ArrayList(EnumField),
 
     access: Access = .ReadWrite,
 
@@ -540,6 +564,8 @@ pub const Field = struct {
         errdefer name.deinit();
         var description = ArrayList(u8).init(allocator);
         errdefer description.deinit();
+        var enum_fields = ArrayList(EnumField).init(allocator);
+        errdefer enum_fields.deinit();
 
         return Self{
             .periph = periph,
@@ -549,6 +575,7 @@ pub const Field = struct {
             .description = description,
             .bit_offset = null,
             .bit_width = null,
+            .enum_fields = enum_fields,
         };
     }
 
@@ -560,6 +587,7 @@ pub const Field = struct {
         the_copy.bit_offset = self.bit_offset;
         the_copy.bit_width = self.bit_width;
         the_copy.access = self.access;
+        the_copy.enum_fields = self.enum_fields;
 
         return the_copy;
     }
@@ -569,6 +597,7 @@ pub const Field = struct {
         self.register.deinit();
         self.name.deinit();
         self.description.deinit();
+        self.enum_fields.deinit();
     }
 
     pub fn fieldResetValue(bit_start: u32, bit_width: u32, reg_reset_value: u32) u32 {
@@ -595,21 +624,26 @@ pub const Field = struct {
         const bit_width = self.bit_width.?;
         const reg_reset_value = self.register_reset_value;
         const reset_value = fieldResetValue(start_bit, bit_width, reg_reset_value);
-        try out_stream.print(
-            \\/// {s} [{}:{}]
-            \\/// {s}
-            \\{s}: u{} = {},
-        , .{
-            name,
-            start_bit,
-            end_bit,
-            // description
-            description,
-            // val
-            name,
-            bit_width,
-            reset_value,
-        });
+        try out_stream.print("/// {s} [{}:{}]\n", .{ name, start_bit, end_bit });
+        if (self.description.items.len != 0) {
+            try out_stream.print("/// {s}\n", .{
+                description,
+            });
+        }
+        // If field is an enum then we print the variants
+        if (self.enum_fields.items.len != 0) {
+            try out_stream.print("/// Enumuerations:\n", .{});
+            for (self.enum_fields.items) |field| {
+                if (field.value) |val| {
+                    try out_stream.print("///   {s} = {}\n", .{ field.name.items, val });
+                }
+            }
+        }
+        if (std.ascii.isDigit(name[0])) {
+            try out_stream.print("FIELD_{s}: u{} = {},", .{ name, bit_width, reset_value });
+        } else {
+            try out_stream.print("{s}: u{} = {},", .{ name, bit_width, reset_value });
+        }
         return;
     }
 };
