@@ -420,7 +420,7 @@ pub fn main() anyerror!void {
                 } else if (ascii.eqlIgnoreCase(chunk.tag, "value")) {
                     var cur_enum = &cur_field.enum_fields.items[cur_field.enum_fields.items.len - 1];
                     if (chunk.data) |data| {
-                        cur_enum.value = try fmt.parseInt(u32, data, 10);
+                        cur_enum.value = try fmt.parseInt(u32, data, 0);
                     }
                 }
             },
